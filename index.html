@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Sun Position + Alarm</title>
+    <script src="https://unpkg.com/suncalc@1.9.0/suncalc.js"></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        background: #f9f9f9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+      }
+      h1 {
+        margin-bottom: 1rem;
+        font-size: 2rem;
+      }
+      .box {
+        background: #fff;
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+      .box p {
+        margin: 0.5rem 0;
+        font-size: 1.2rem;
+      }
+      .alarm-ui {
+        margin-top: 1.5rem;
+        text-align: left;
+      }
+      .alarm-ui label {
+        display: block;
+        margin: 0.3rem 0;
+      }
+      #alarmStatus {
+        margin-top: 0.8rem;
+        font-weight: bold;
+      }
+      #alarmStatus.ok {
+        color: #2e7d32;
+      } /* green on trigger   */
+      #alarmStatus.waiting {
+        color: #1565c0;
+      } /* blue while waiting */
+      #alarmStatus.none {
+        color: #666;
+      } /* grey when none     */
+    </style>
+  </head>
+  <body>
+    <h1>Live Sun Position</h1>
+
+    <div class="box">
+      <p><strong>Latitude:</strong> 33.26553° N</p>
+      <p><strong>Longitude:</strong> –7.58754° W</p>
+      <p><strong>Elevation (°):</strong> <span id="elevation">--</span></p>
+      <p><strong>Azimuth (°):</strong> <span id="azimuth">--</span></p>
+      <p><strong>Max elevation (°):</strong> <span id="maxElev">--</span></p>
+
+      <!--  ───── Sun‑alarm controls ───── -->
+      <div class="alarm-ui">
+        <label>
+          Trigger elevation (°):
+          <input type="number" id="alarmDeg" step="0.1" placeholder="e.g. 45" />
+        </label>
+
+        <label>
+          Alarm sound (optional):
+          <input type="file" id="alarmFile" accept="audio/*" />
+        </label>
+
+        <button id="setAlarmBtn">Set alarm</button>
+        <p id="alarmStatus" class="none">No alarm set.</p>
+      </div>
+    </div>
+
+    <script>
+      /* ---------- Location ---------- */
+      const latitude = 33.26553;
+      const longitude = -7.58754;
+
+      /* ---------- Today’s max elevation ---------- */
+      const times = SunCalc.getTimes(new Date(), latitude, longitude);
+      const noonPos = SunCalc.getPosition(times.solarNoon, latitude, longitude);
+      const maxAltDeg = ((noonPos.altitude * 180) / Math.PI).toFixed(1);
+      document.getElementById("maxElev").textContent = maxAltDeg;
+
+      /* ---------- Alarm state ---------- */
+      let alarmTarget = null; // number (deg) or null
+      let alarmPlayed = false;
+      let alarmAudio = null; // Audio() object or null
+
+      document.getElementById("setAlarmBtn").addEventListener("click", () => {
+        const degInput = parseFloat(document.getElementById("alarmDeg").value);
+        if (isNaN(degInput)) {
+          alert("Please enter a number for elevation.");
+          return;
+        }
+
+        alarmTarget = degInput;
+        alarmPlayed = false;
+
+        /* choose sound */
+        const file = document.getElementById("alarmFile").files[0];
+        if (file) {
+          /* user‑supplied file */
+          if (alarmAudio) URL.revokeObjectURL(alarmAudio.src);
+          alarmAudio = new Audio(URL.createObjectURL(file));
+        } else {
+          /* fallback: quick 880 Hz beep */
+          alarmAudio = null;
+        }
+
+        statusMsg(`Alarm armed for ${alarmTarget}°`, "waiting");
+      });
+
+      /* helper to change status line */
+      function statusMsg(msg, cls) {
+        const e = document.getElementById("alarmStatus");
+        e.textContent = msg;
+        e.className = cls;
+      }
+
+      /* ---------- Live updates ---------- */
+      function updateSun() {
+        const now = new Date();
+        const pos = SunCalc.getPosition(now, latitude, longitude);
+        const azDeg = ((pos.azimuth * 180) / Math.PI + 180).toFixed(2);
+        const altDeg = ((pos.altitude * 180) / Math.PI).toFixed(1);
+
+        document.getElementById("azimuth").textContent = azDeg;
+        document.getElementById("elevation").textContent = altDeg;
+
+        /* check alarm */
+        if (alarmTarget !== null && !alarmPlayed && altDeg >= alarmTarget) {
+          alarmPlayed = true;
+          if (alarmAudio) {
+            alarmAudio.play().catch(() => null);
+          } else {
+            simpleBeep();
+          }
+          statusMsg(`Alarm! Sun reached ${altDeg}°`, "ok");
+        }
+      }
+
+      /* 1‑second timer */
+      updateSun();
+      setInterval(updateSun, 1000);
+
+      /* ---------- tiny fallback beep (Web Audio) ---------- */
+      function simpleBeep() {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1);
+      }
+    </script>
+  </body>
+</html>
