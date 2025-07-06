@@ -165,7 +165,7 @@
         document.getElementById("elevation").textContent = altDeg;
 
         /* check alarm */
-        if (alarmTarget !== null && !alarmPlayed && altDeg >= alarmTarget) {
+        if (alarmTarget !== null && !alarmPlayed && altDeg == alarmTarget) {
           alarmPlayed = true;
           if (alarmAudio) {
             alarmAudio.play().catch(() => null);
