@@ -144,7 +144,12 @@
           if (alarmAudio) {
             alarmAudio.play().catch(() => null);
           } else {
-            simpleBeep();
+            clockTicks({
+              count: 7,
+              interval: 1,
+              tickDuration: 0.5,
+              frequency: 440,
+            });
           }
           statusMsg(`Alarm! Sun reached ${altDeg}°`, "ok");
         }
@@ -154,15 +159,44 @@
       updateSun();
       setInterval(updateSun, 1000);
 
-      /* ---------- tiny fallback beep (Web Audio) ---------- */
-      function simpleBeep() {
+      // ################################
+      /**
+       * Play a run of clock‑like ticks.
+       *
+       * @param {number} count           How many ticks you want (default 60).
+       * @param {number} interval        Time between the starts of two ticks, in seconds (default 1 s).
+       * @param {number} tickDuration    Audible length of each tick, in seconds (default 0.02 s).
+       * @param {number} frequency       Pitch of the tick, in hertz (default 880 Hz).
+       */
+      function clockTicks({
+        count = 60,
+        interval = 1,
+        tickDuration = 0.02,
+        frequency = 880,
+      } = {}) {
+        // Web‑Audio setup
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        osc.type = "sine";
-        osc.frequency.value = 880;
-        osc.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 1);
+        const osc = ctx.createOscillator(); // sound source
+        const gain = ctx.createGain(); // acts like a volume knob
+
+        // Shape and route the signal
+        osc.type = "square"; // a clickier “tick” than sine
+        osc.frequency.value = frequency;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        const now = ctx.currentTime;
+
+        // Schedule each tick by toggling the gain (volume) quickly on/off
+        for (let i = 0; i < count; i++) {
+          const start = now + i * interval; // when this tick begins
+          gain.gain.setValueAtTime(1, start); // volume up
+          gain.gain.setValueAtTime(0, start + tickDuration); // volume back down
+        }
+
+        // Fire it up and stop after the last tick
+        osc.start(now);
+        osc.stop(now + count * interval + 0.1);
       }
     </script>
   </body>
